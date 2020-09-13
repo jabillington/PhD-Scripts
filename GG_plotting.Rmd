@@ -1,0 +1,112 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+rm(list=ls())
+library(tidyverse)
+library(RColorBrewer)
+library(ggsignif)
+library(gdtools)
+library(ggplot2)
+library(stringr)
+library(gridExtra)
+library(cowplot)
+library("ggsci")
+setwd("~/Desktop")
+
+
+
+
+tidy_data<-read_csv('median_caluclations.csv')
+
+
+summary_dataset<-tidy_data %>%
+  group_by(Insulator,Line,Days) %>%
+  summarise(median = median(`FITC-A`))
+summary_dataset<-summary_dataset[summary_dataset$Insulator!='A-',]
+summary_dataset[summary_dataset$Days==20,]$Days=35
+summary_dataset$Days<-as.factor(summary_dataset$Days)
+summary_dataset[summary_dataset$Insulator=='A',]$Insulator='2x\ncHS4'
+summary_dataset[summary_dataset$Insulator=='B',]$Insulator='-\n Utro'
+
+
+f6<-summary_dataset[summary_dataset$Line=='F6',]
+b42<-summary_dataset[summary_dataset$Line=='B42',]
+
+a<-ggplot(f6,aes(x=Insulator,y=median,fill=Days)) +
+  geom_bar(position = 'dodge',stat='identity',color='black') +
+
+  scale_y_continuous(expand = c(0,0),limits=c(0,2600)) +
+  ylab('MFI (a.u)') +
+  xlab('') +
+  scale_fill_brewer(palette="Set2") +
+
+  theme_cowplot(12) +
+  guides(fill=guide_legend(title="Days PT")) +
+  ggtitle('D277 F4') +
+  theme(legend.position = c(0.7, 0.95)) +
+  theme(axis.title=element_text(size=12,face="bold")) +
+  scale_fill_jco()
+a
+
+b<-ggplot(b42,aes(x=Insulator,y=median,fill=Days)) +
+  geom_bar(position = 'dodge',stat='identity',color='black') +
+  scale_y_continuous(expand = c(0,0),limits=c(0,2600)) +
+  guides(fill=FALSE) +
+  ylab('MFI (a.u)') +
+  xlab('') +
+  #scale_fill_brewer(palette="Set2") +
+  theme_cowplot(12) +
+  ggtitle('D277 B42') +
+  theme(axis.title=element_text(size=12,face="bold")) +
+  scale_fill_jco()
+
+b
+plot_grid(a,b,ncol=1,align="h",labels = c('A', 'B', label_size = 16))
+
+final_tp_b42<-b42[which(b42$Days==35),]
+final_tp_f6<-f6[which(f6$Days==35),]
+initial_tp_b42<-b42[which(b42$Days==11),]
+initial_tp_f6<-f6[which(f6$Days==11),]
+
+
+final_tp_b42$CpG=c(154,57,76,43,34,43,38,105,36,42,123,52,36,51)
+final_tp_f6$CpG=c(154,57,76,43,34,43,38,105,36,42,123,52,36,51)
+
+initial_tp_b42$CpG=c(154,57,76,43,34,43,38,105,36,42,123,52,36,51)
+initial_tp_f6$CpG=c(154,57,76,43,34,43,38,105,36,42,123,52,36,51)
+
+final_tp_f6$Candidate='Non'
+final_tp_f6[c(1,7,9,13),]$Candidate='Ins'
+final_tp_b42$Candidate='Non'
+final_tp_b42[c(1,7,9,13),]$Candidate='Ins'
+
+
+initial_tp_f6$Candidate='Non'
+initial_tp_f6[c(1,7,9,13),]$Candidate='Ins'
+initial_tp_b42$Candidate='Non'
+initial_tp_b42[c(1,7,9,13),]$Candidate='Ins'
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
