@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Plotting demo"
 output: html_document
 ---
 
