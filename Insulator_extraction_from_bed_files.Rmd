@@ -1,0 +1,91 @@
+title: "Insulator analysis"
+output: html_notebook
+---
+Script to pull out the DNA sequences associated with chromatin boundaries from Genome-wide prediction and analysis of human chromatin boundary elements Wang et al. 2012. Chr2 data 
+Also generate a corresponding number of random sequences for passing on to a machine learning pipeline for attempting 
+```{r}
+# setwd("/Insulators/Supp_data_genome_wide_discovery/")
+# Pre-amble
+library(feather)
+library(knitr)
+#library(HelloRanges)
+
+```
+ Set wd to Insulator Discovery Dataset
+ Example dataset for just Chromasome #2
+ HelloRanges allows Fasta files to be obtained in the regions delineated in the .bed files 
+ the paper proivdes.
+```{r}
+ranges<-bedtools_getfasta("--bed chr2_insulators.bed --fi chr2.fa")
+insulators<-eval(ranges)
+write.table(insulators, "chr2_data.txt", sep="\t")
+insulators
+
+```
+Fasta sequences insulators 
+One of our approaches to generating data for machine learning is to sample random regions of the genome as examples of 'non' boundary DNA
+```{r}
+
+
+#how many regions to sample?
+number <- 1000
+#how many bp to add to start
+span <- 1000
+#load library
+library(BSgenome)
+library(BSgenome.Hsapiens.UCSC.hg19)
+#chromosomes of interest
+my_chr <- c(2)
+my_chr <- gsub(pattern="^", replacement='chr', my_chr)
+#initialise list to store chromosome sizes
+my_chr_size <- list()
+for (i in my_chr){
+  my_chr_size[[i]] <- length(BSgenome.Hsapiens.UCSC.hg19[[i]])
+}
+#checkout my_chr_size
+head(my_chr_size,2)
+#$chr1
+#[1] 249250621
+#
+#$chr2
+#[1] 243199373
+#initialise some vectors for storing random coordinates
+my_random_start  <- vector()
+my_random_end    <- vector()
+my_random_chr    <- vector()
+my_random_strand <- vector()
+set.seed(12345)
+#loop through number of regions
+for(i in 1:number){
+  my_random_chr[i] <- sample(x=my_chr,size=1)
+  my_random_strand[i] <- sample(x=c('-','+'),size=1)
+  my_max <- my_chr_size[[my_random_chr[i]]]-span
+  my_random_start[i] <- runif(n=1, min=1, max=my_max)
+  my_random_end[i] <- my_random_start[i] + span
+}
+my_random_loci <- data.frame(chr=my_random_chr,
+                             start=my_random_start,
+                             end=my_random_end,
+                             strand=my_random_strand)
+head(my_random_loci)
+# Example output
+#chr     start       end strand
+#1 chr18  59414645  59415645      +
+#2 chr22   8535467   8536467      -
+#3  chr8 106509140 106510140      +
+#4  chrY   9046806   9047806      -
+#5 chr18  30543689  30544689      -
+#6 chr12  53872997  53873997      -
+write.table(my_random_loci, file="random_sample.bed", quote=F, sep="\t", row.names=F, col.names=F,)
+ranges<-bedtools_getfasta("--bed random_sample.bed --fi chr2.fa")
+ranges
+random_sequences<-eval(ranges)
+width(random_sequences)
+random_sequences
+write.table(random_sequences, "random_sample_data.txt", sep="\t")
+
+
+```
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
