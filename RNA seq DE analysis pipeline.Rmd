@@ -1,0 +1,79 @@
+---
+title: "RNA seq DE analysis pipeline"
+output: html_document
+---
+
+Bare bones of scripts for kallisto and sleuth for quantifying RNA seq data.
+Working with 4 samples from SRX672303 sra project. Study:CTCF establishes discrete functional chromatin domains at the Hox clusters during differentiatio
+
+Sample info
+2 samples wild type, 2 samples knockout for CTCF site in HoxA cluster
+SRR1539361 Day0.WT.b1 [RNA-Seq]; Mus musculus; RNA-Seq
+SRR1539362 Day0.WT.b2 [RNA-Seq]; Mus musculus; RNA-Seq
+SRR1539363 Day0.Δ5|6.b1 [RNA-Seq]; Mus musculus; RNA-Seq
+SRR1539364  Day0.Δ5|6.b2 [RNA-Seq]; Mus musculus; RNA-Seq
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Use kallisto to first generate a transcriptome index and then quantify counts
+```{bash}
+source activate kallisto # Conda env named kallisto with kallisto and hd5f modules
+# Necessary workaround because kalisto exec doesn't output the h5 files needed for sleuth
+
+kallisto index -i genome_index.idx -k 31 Mus_musculus.GRCm38.cdna.all.fa
+kallisto quant -i genome_index.idx -o output -b 30 --single -l 180 -s 20 pairA_1.fastq 
+
+
+# Perform quant on all of the Fastq dumps in a directory 
+for i in *.fastq
+do
+kallisto quant -i genome_index.idx -o  eval 'echo "$i""_dir"' -b 30 --single -l 180 -s 20 i
+done
+
+```
+Next pass kallistos to R for sleuth.
+Load in required packages for sleuth to work in R
+```{r}
+
+library('BiocManager')
+library("devtools")
+library("sleuth")
+BiocManager::install("rhdf5")
+```
+
+Get the correct ensembl gene names from the mouse transcriptome for using in the sleuth shiny app
+```{r Gene_names, echo=FALSE}
+tx2gene <- function(){
+  mart <- biomaRt::useMart(biomart = "ensembl", dataset = "mmusculus_gene_ensembl")
+	t2g <- biomaRt::getBM(attributes = c("ensembl_transcript_id", "ensembl_gene_id",
+            	"external_gene_name"), mart = mart)
+	t2g <- dplyr::rename(t2g, target_id = ensembl_transcript_id,
+                 	ens_gene = ensembl_gene_id, ext_gene = external_gene_name)
+	return(t2g)
+	}
+
+t2g <- tx2gene()
+```
+Reading in the kalisto abundance data into R
+Generate a simple sleuth model s2c of WT vs KO DE as a starting point for data analysis
+
+```{r sleuth_model, echo=FALSE}
+base_dir <- "~/Documents/RNA seq/kallisto outputs"
+samples <- paste0("sample ", 1:4)
+kallisto_dirs <- sapply(samples, function(id) file.path(base_dir, id))
+
+s2c <- data.frame(path=kallisto_dirs, sample=samples, condition = c('WT','WT','KO','KO'),each=1,stringsAsFactors=FALSE)
+s2c
+so <- sleuth_prep(s2c, ~condition, target_mapping = t2g)
+so <- sleuth_fit(so)
+so <- sleuth_wt(so, which_beta="conditionWT") 
+sleuth_live(so)
+
+
+plot_bootstrap(so, "ENSMUST00000178774.2", units = "est_counts", color_by = "condition")
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
