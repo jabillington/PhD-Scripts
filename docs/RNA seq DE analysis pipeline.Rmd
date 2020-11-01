@@ -1,0 +1,109 @@
+---
+title: "RNA seq DE analysis pipeline"
+output: rmarkdown::github_document
+---
+
+Bare bones of scripts for kallisto and sleuth for quantifying RNA seq data.\newline
+Working with 8 samples from SRX672303 sra project. 
+
+Study: CTCF establishes discrete functional chromatin domains at the Hox clusters during differentiation
+
+Sample info:
+4 samples wild type, 4 samples knockout for CTCF site in HoxA cluster taken at Day 0 and Day 4 of differentiation
+```
+Sample 1 SRR1539361 Day0.WT.b1 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 2 SRR1539362 Day0.WT.b2 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 3 SRR1539363 Day0.Δ5|6.b1 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 4 SRR1539364  Day0.Δ5|6.b2 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 5 SRR1539366 Day4.WT.b1 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 6 SRR1539367 Day4.WT.b2 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 7 SRR1539368 Day4.Δ5|6.b1 [RNA-Seq]; Mus musculus; RNA-Seq
+Sample 8 SRR1539369  Day4.Δ5|6.b2 [RNA-Seq]; Mus musculus; RNA-Seq
+
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Documents/RNA seq/" )
+
+```
+
+Going to use kallisto to first generate a transcriptome index and then quantify counts.First activate conda environment for kallisto. This seems to be necessary workaround because kalisto executable doesn't output the h5 files needed for sleuth on mac for some reason.
+```
+source activate kallisto # Conda env named kallisto with kallisto and hd5f modules
+```
+Run kallisto as follows
+
+```
+kallisto index -i genome_index.idx -k 31 Mus_musculus.GRCm38.cdna.all.fa
+
+kallisto quant -i genome_index.idx -o output -b 30 --single -l 180 -s 20 sample_x.fastq 
+```
+(Optional) perform kallisto quant on all of the Fastq dumps in a directory with
+```
+for i in *.fastq
+do
+kallisto quant -i genome_index.idx -o  eval 'echo "$i""_dir"' -b 30 --single -l 180 -s 20 i
+done
+```
+
+Load in required packages for sleuth to work in R
+```{r Load packages, echo=TRUE}
+library("sleuth")
+library("biomaRt")
+```
+Get the correct ensembl gene names from the mouse transcriptome for using in the sleuth shiny app
+```{r Load gene_names, echo=TRUE}
+tx2gene <- function(){
+  mart <- biomaRt::useMart(biomart = "ensembl", dataset = "mmusculus_gene_ensembl")
+	t2g <- biomaRt::getBM(attributes = c("ensembl_transcript_id", "ensembl_gene_id",
+            	"external_gene_name"), mart = mart)
+	t2g <- dplyr::rename(t2g, target_id = ensembl_transcript_id,
+                 	ens_gene = ensembl_gene_id, ext_gene = external_gene_name)
+	return(t2g)
+	}
+
+t2g <- tx2gene()
+```
+Next pass kallistos to R for sleuth. Reading in the kalisto abundance data into R
+Generate a simple sleuth model s2c of WT vs KO DE as a starting point for data analysis
+```{r sleuth_model, echo=TRUE}
+#setwd("~/Documents/RNA seq/")
+samples<-read.table('CTCF_RNA_Seq.tsv',sep='\t',header=TRUE,stringsAsFactors = FALSE)
+samples
+```
+Next generate the different models we will test with sleuth
+A full model (Days + Genotype) and a reduced model (Days)
+```{r performing sleuth,echo=FALSE}
+so <- sleuth_prep(samples,target_mapping=t2g, read_bootstrap_tpm=TRUE,extra_bootstrap_summary=TRUE)
+
+so<- sleuth_fit(so, ~genotype + day, "full")
+so<- sleuth_fit(so, ~day, 'reduced')
+so <- sleuth_lrt(so, "reduced", "full")
+so <- sleuth_wt(so, "genotype_WT")
+#sleuth_live(so)
+sleuth_save(so, "ctcf_analysis.rds")
+
+```
+
+```{r sleuth_plots, echo=FALSE}
+sleuth::plot_pca(so,color_by = 'genotype',text_labels=TRUE)
+
+sleuth::plot_mean_var(so)
+
+sleuth::plot_ma(so,test ='genotype_WT',test_type = 'wt')
+
+sleuth::plot_volcano(so,test='genotype_WT',test_type = 'wt')
+```
+
+```{r}
+sleuth_table <- sleuth_results(so, 'genotype_WT', 'wt', show_all = FALSE)
+sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.5)
+head(sleuth_significant, 20)
+
+
+plot_bootstrap(so, "ENSMUST00000214462.1", units = "est_counts", color_by = "genotype")
+
+plot_bootstrap(so, "ENSMUST00000140316.1", units = "est_counts", color_by = "genotype")
+```  
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
